@@ -1,0 +1,74 @@
+## Etiquetado de las imágenes:
+image_paths = list(paths.list_images('images'))
+train_images = []
+train_labels = []
+class_object = annotations['labels']
+
+# loop over the input images
+for (i, image_path) in enumerate(image_paths):
+    #read image
+    image = cv2.imread(image_path)
+    #make images gray
+    image = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+    #label image using the annotations
+    label = class_object.index(annotations["annotations"][image_path[7:]][0]['label'])
+    tmp_label = annotations["annotations"][image_path[7:]][0]['label']
+    # resize image
+    image = cv2.resize(image, (32, 32))
+    # flatten the image
+    pixels = image.flatten()
+    #Append flattened image to
+    train_images.append(pixels)
+    train_labels.append(label)
+    print('Loaded...', '\U0001F483', 'Image', str(i+1), 'is a', tmp_label)
+
+## Datasets de entrenamiento y prueba.
+train_images = np.array(train_images).astype('float32')
+train_labels = np.array(train_labels)
+
+train_labels = train_labels.astype(int)
+train_labels = train_labels.reshape((train_labels.size,1))
+print(train_labels)
+
+test_size = 0.2
+train_samples, test_samples, train_labels, test_labels = train_test_split(
+    train_images, train_labels, test_size=test_size, random_state=0)
+
+## Entrenamiento del modelo:
+start_datetime = datetime.now()
+
+knn = cv2.ml.KNearest_create()
+knn.train(train_samples, cv2.ml.ROW_SAMPLE, train_labels)
+
+## get different values of K
+k_values = [1, 2, 3, 4, 5]
+k_result = []
+for k in k_values:
+    ret,result,neighbours,dist = knn.findNearest(test_samples,k=k)
+    k_result.append(result)
+flattened = []
+for res in k_result:
+    flat_result = [item for sublist in res for item in sublist]
+    flattened.append(flat_result)
+
+end_datetime = datetime.now()
+print('Training Duration: ' + str(end_datetime-start_datetime))
+
+## Pruebas de resultados con la matriz de confusión:
+accuracy_res = []
+con_matrix = []
+## we will use a loop because we have multiple value of k
+for k_res in k_result:
+    label_names = [0, 1]
+    cmx = confusion_matrix(test_labels, k_res, labels=label_names)
+    con_matrix.append(cmx)
+    ## get values for when we predict accurately
+    matches = k_res==test_labels
+    correct = np.count_nonzero(matches)
+    ## calculate accuracy
+    accuracy = correct*100.0/result.size
+    accuracy_res.append(accuracy)
+## stor accuracy for later when we create the graph
+res_accuracy = {k_values[i]: accuracy_res[i] for i in range(len(k_values))}
+list_res = sorted(res_accuracy.items())
+
